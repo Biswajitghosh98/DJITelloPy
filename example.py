@@ -9,8 +9,14 @@ import time
 S = 60
 # Frames per second of the pygame window display
 FPS = 25
-
-
+#initial coordinates        
+py = 0.0
+#pz = 0.0
+px = 0.0
+vx = 0.0
+vy = 0.0
+i = 1
+#vz = 0.0
 class FrontEnd(object):
     """ Maintains the Tello display and moves it through the keyboard keys.
         Press escape key to quit.
@@ -25,7 +31,7 @@ class FrontEnd(object):
     def __init__(self):
         # Init pygame
         pygame.init()
-
+        
         # Creat pygame window
         pygame.display.set_caption("Tello video stream")
         self.screen = pygame.display.set_mode([960, 720])
@@ -41,7 +47,15 @@ class FrontEnd(object):
         self.speed = 10
 
         self.send_rc_control = False
-
+        self.ptx = 0.0
+        self.pty = 0.0
+        #self.ptz = 0.0
+        self.vx1 = 0.0
+        self.vy1 = 0.0
+        #self.vz1 = 0.0
+        self.ax = 0.0
+        self.ay = 0.0
+        #self.az = 0.0
         # create update timer
         pygame.time.set_timer(USEREVENT + 1, 50)
 
@@ -70,17 +84,53 @@ class FrontEnd(object):
         while not should_stop:
 
             for event in pygame.event.get():
+            	global px,py,pz,vx,vy,vz,i
+            	start = time.time()
+            	#v_x =self.tello.get_vgx()
+            	#v_y =self.tello.get_vgy()
+            	#v_z =self.tello.get_vgz()
+            	ax = self.tello.get_agx()
+            	ay = self.tello.get_agy()
+            	az = self.tello.get_agz()
+
+                end = time.time()
+                #start1 = time.time()
+                self.ptx = px
+                self.pty = py
+                #self.ptz = pz
+                self.vx1 = ax*(end-start)
+                self.vy1 = ay*(end-start)
+                #self.vz1 = self.az*(end-start)
+                vx = vx + self.vx1
+                vy = vy + self.vy1
+                #vz = vz + self.vz1
+                px = self.ptx + (vx*1000)*((end-start)*1000)/1000000.0
+                py = self.pty + (vy*1000)*((end-start)*1000)/1000000.0
+            	#pz = self.ptz + vz*(end-start)
+            	print("VX :   "+ str(vx) + "    VY :   " + str(vy))
+            	print("X :   "+ str(px) + "    Y :   " + str(py))
+            	print("AX :   "+ str(ax) + "    AY :   " + str(ay)+"    AZ :    " + str(az))
                 if event.type == USEREVENT + 1:
-                    self.update()
+                	#end1 = time.time()
+                	#print("Extra time lag : "+str(end1-start1))
+                	self.update()
                 elif event.type == QUIT:
-                    should_stop = True
+                	#end1 = time.time()
+                	#print("Extra time lag : "+str(end1-start1))
+                	should_stop = True
                 elif event.type == KEYDOWN:
                     if event.key == K_ESCAPE:
-                        should_stop = True
+                    	#end1 = time.time()
+                    	#print("Extra time lag : "+str(end1-start1))
+                    	should_stop = True
                     else:
+                    	#end1 = time.time()
+                    	#print("Extra time lag : "+str(end1-start1))
                         self.keydown(event.key)
                 elif event.type == KEYUP:
-                    self.keyup(event.key)
+                	#end1 = time.time()
+                	#print("Extra time lag : "+str(end1-start1))
+                	self.keyup(event.key)
 
             if frame_read.stopped:
                 frame_read.stop()
