@@ -4,6 +4,7 @@ import pygame
 from pygame.locals import *
 import numpy as np
 import time
+import math
 
 # Speed of the drone
 S = 60
@@ -38,6 +39,14 @@ class FrontEnd(object):
 
         # Init Tello object that interacts with the Tello drone
         self.tello = Tello()
+        #initital r,p,y
+        self.initial_roll=0.0
+        self.initial_pitch=0.0
+        self.initial_yaw=0.0
+        #initial accelerations
+        self.initial_ax = 0.0
+        self.initial_ay = 0.0
+        self.initial_az = 9999.0
 
         # Drone velocities between -100~100
         self.for_back_velocity = 0
@@ -58,6 +67,20 @@ class FrontEnd(object):
         #self.az = 0.0
         # create update timer
         pygame.time.set_timer(USEREVENT + 1, 50)
+    def get_acc(self):
+        roll = math.radians(self.tello.get_roll()-self.initial_roll)
+        pitch = math.radians(self.tello.get_pitch()-self.initial_pitch)
+        yaw = -math.radians(self.tello.get_yaw()-self.initial_yaw)
+        Tz = np.matrix([[math.cos(yaw), math.sin(yaw), 0], [-math.sin(yaw), math.cos(yaw), 0], [0, 0, 1]])
+        Ty = np.matrix([[math.cos(pitch), 0, math.sin(pitch)], [0, 1, 0], [-math.sin(pitch), 0, math.cos(pitch)]])
+        Tx = np.matrix([[1, 0, 0], [0, math.cos(roll), -math.sin(roll)], [0, math.sin(roll), math.cos(roll)]])
+        T_n = Tz*Ty*Tx
+        A = np.matrix([[self.tello.get_agx()], [self.tello.get_agy()], [self.tello.get_agz()]])
+        A_correct = T_n*A
+        A_correct[0] = A_correct[0]-self.initial_ax
+        A_correct[1] = A_correct[1]-self.initial_ay
+        A_correct[2] = A_correct[2]-self.initial_az
+        return A_correct
 
     def run(self):
 
@@ -89,17 +112,18 @@ class FrontEnd(object):
             	#v_x =self.tello.get_vgx()
             	#v_y =self.tello.get_vgy()
             	#v_z =self.tello.get_vgz()
-            	ax = self.tello.get_agx()
-            	ay = self.tello.get_agy()
-            	az = self.tello.get_agz()
+            	#ax = self.tello.get_agx()
+            	#ay = self.tello.get_agy()
+            	#az = self.tello.get_agz()
+                A = self.get_acc()
 
                 end = time.time()
                 #start1 = time.time()
                 self.ptx = px
                 self.pty = py
                 #self.ptz = pz
-                self.vx1 = ax*(end-start)
-                self.vy1 = ay*(end-start)
+                self.vx1 = A[0]*(end-start)
+                self.vy1 = A[1]*(end-start)
                 #self.vz1 = self.az*(end-start)
                 vx = vx + self.vx1
                 vy = vy + self.vy1
@@ -109,7 +133,7 @@ class FrontEnd(object):
             	#pz = self.ptz + vz*(end-start)
             	print("VX :   "+ str(vx) + "    VY :   " + str(vy))
             	print("X :   "+ str(px) + "    Y :   " + str(py))
-            	print("AX :   "+ str(ax) + "    AY :   " + str(ay)+"    AZ :    " + str(az))
+            	print("AX :   "+ str(A[0]) + "    AY :   " + str(A[1])+"    AZ :    " + str(A[2]))
                 if event.type == USEREVENT + 1:
                 	#end1 = time.time()
                 	#print("Extra time lag : "+str(end1-start1))
