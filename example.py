@@ -5,6 +5,7 @@ from pygame.locals import *
 import numpy as np
 import time
 import math
+from collections import deque
 
 # Speed of the drone
 S = 60
@@ -17,6 +18,7 @@ px = 0.0
 vx = 0.0
 vy = 0.0
 i = 1
+sigma = 1 # FOR gaussian
 #vz = 0.0
 class FrontEnd(object):
     """ Maintains the Tello display and moves it through the keyboard keys.
@@ -65,17 +67,63 @@ class FrontEnd(object):
         self.ax = 0.0
         self.ay = 0.0
         #self.az = 0.0
+
+        self.agx_array = deque([])
+        self.agy_array = deque([])
+        self.agz_array = deque([])
+        self.agx_true = 0
+        self.agy_true = 0
+        self.agz_true = 0
+
         # create update timer
         pygame.time.set_timer(USEREVENT + 1, 50)
     def get_acc(self):
         roll = math.radians(self.tello.get_roll()-self.initial_roll)
         pitch = math.radians(self.tello.get_pitch()-self.initial_pitch)
         yaw = -math.radians(self.tello.get_yaw()-self.initial_yaw)
+        print("roll = ",roll,", pitch = ",pitch, ", yaw = ",yaw)
+        print("agx = ",self.tello.get_agx(),", agy = ",self.tello.get_agy(), ", agz = ",self.tello.get_agz())
         Tz = np.matrix([[math.cos(yaw), math.sin(yaw), 0], [-math.sin(yaw), math.cos(yaw), 0], [0, 0, 1]])
         Ty = np.matrix([[math.cos(pitch), 0, math.sin(pitch)], [0, 1, 0], [-math.sin(pitch), 0, math.cos(pitch)]])
         Tx = np.matrix([[1, 0, 0], [0, math.cos(roll), -math.sin(roll)], [0, math.sin(roll), math.cos(roll)]])
         T_n = Tz*Ty*Tx
-        A = np.matrix([[self.tello.get_agx()], [self.tello.get_agy()], [self.tello.get_agz()]])
+        if len(self.agx_array)<8:
+            self.agx_array.append(self.tello.get_agx())
+            self.agy_array.append(self.tello.get_agy())
+            self.agz_array.append(self.tello.get_agz())
+
+        else:
+            agx_mean = sum(self.agx_array)/8
+            agy_mean = sum(self.agy_array)/8
+            agz_mean = sum(self.agz_array)/8
+
+            alphax = gaussian(self.tello.get_agxd(), agx_mean, sigma)
+            alphay = gaussian(self.tello.get_agx(), agx_mean, sigma)
+            alphaz = gaussian(self.tello.get_agx(), agx_mean, sigma)
+
+            print("alphas")
+            print(alphax)
+            print(alphay)
+            print(alphaz)
+
+            agx_corrected = alphax*self.tello.get_agx() + (1-alphax)*agx_mean
+            agy_corrected = alphay*self.tello.get_agy() + (1-alphay)*agy_mean
+            agz_corrected = alphaz*self.tello.get_agz() + (1-alphaz)*agz_mean
+            print("correct agx = ",agx_corrected,", correct agy = ",agy_corrected, ", correct agz = ",agz_corrected)
+
+            self.agx_array.popleft()
+            self.agx_array.append(agx_corrected)
+            self.agy_array.popleft()
+            self.agy_array.append(agy_corrected)
+            self.agz_array.popleft()
+            self.agz_array.append(agz_corrected)
+
+            self.agx_true = agx_corrected
+            self.agy_true = agy_corrected
+            self.agz_true = agz_corrected
+
+        A = np.matrix([[self.agx_true], [self.agy_true], [self.agz_true]])
+
         A_correct = T_n*A
         A_correct[0] = A_correct[0]-self.initial_ax
         A_correct[1] = A_correct[1]-self.initial_ay
@@ -105,16 +153,17 @@ class FrontEnd(object):
 
         should_stop = False
         while not should_stop:
-
+            self.tello.get_battery()
             for event in pygame.event.get():
-            	global px,py,pz,vx,vy,vz,i
-            	start = time.time()
-            	#v_x =self.tello.get_vgx()
-            	#v_y =self.tello.get_vgy()
-            	#v_z =self.tello.get_vgz()
-            	#ax = self.tello.get_agx()
-            	#ay = self.tello.get_agy()
-            	#az = self.tello.get_agz()
+                global px,py,pz,vx,vy,vz,i
+                start = time.time()
+                #v_x =self.tello.get_vgx()
+                #v_y =self.tello.get_vgy()
+                #v_z =self.tello.get_vgz()
+                #ax = self.tello.get_agx()
+                #ay = self.tello.get_agy()
+                #az = self.tello.get_agz()
+
                 A = self.get_acc()
 
                 end = time.time()
@@ -130,10 +179,10 @@ class FrontEnd(object):
                 #vz = vz + self.vz1
                 px = self.ptx + (vx*1000)*((end-start)*1000)/1000000.0
                 py = self.pty + (vy*1000)*((end-start)*1000)/1000000.0
-            	#pz = self.ptz + vz*(end-start)
-            	print("VX :   "+ str(vx) + "    VY :   " + str(vy))
-            	print("X :   "+ str(px) + "    Y :   " + str(py))
-            	print("AX :   "+ str(A[0]) + "    AY :   " + str(A[1])+"    AZ :    " + str(A[2]))
+                #pz = self.ptz + vz*(end-start)
+                print("VX :   "+ str(vx) + "    VY :   " + str(vy))
+                print("X :   "+ str(px) + "    Y :   " + str(py))
+                print("AX :   "+ str(A[0]) + "    AY :   " + str(A[1])+"    AZ :    " + str(A[2]))
                 if event.type == USEREVENT + 1:
                 	#end1 = time.time()
                 	#print("Extra time lag : "+str(end1-start1))
@@ -217,10 +266,13 @@ class FrontEnd(object):
 
     def update(self):
         """ Update routine. Send velocities to Tello."""
-        if self.send_rc_control:
-            self.tello.send_rc_control(self.left_right_velocity, self.for_back_velocity, self.up_down_velocity,
-                                       self.yaw_velocity)
+        #if self.send_rc_control:
+        #    self.tello.send_rc_control(self.left_right_velocity, self.for_back_velocity, self.up_down_velocity,
+        #                               self.yaw_velocity)
 
+def gaussian(x, mean, sigma):
+    g = np.exp(-0.5*((x-mean)/sigma)**2)
+    return g
 
 def main():
     frontend = FrontEnd()
